@@ -1,0 +1,14 @@
+{ "columns":9,
+ "image":"pj.png",
+ "imageheight":48,
+ "imagewidth":288,
+ "margin":0,
+ "name":"pj",
+ "spacing":0,
+ "tilecount":9,
+ "tiledversion":"1.11.2",
+ "tileheight":32,
+ "tilewidth":32,
+ "type":"tileset",
+ "version":"1.10"
+}

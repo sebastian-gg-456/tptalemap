@@ -1,17 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phaser Tilemap Game</title>
+    <style>
+      body {
+        margin: 0;
+        background: #000;
+      }
+      #game-container {
+        width: 800px;
+        height: 600px;
+        margin: auto;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container"></div>
 
-    <title>Phaser 3 Tilemap Template</title>
-
+    <script type="module" src="./main.js"></script>
     <!-- Import Phaser 3 from CDN -->
     <script src="//cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
-
-    <!-- Import an run main.js : load the game config and start first scene -->
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body></body>
+  </body>
 </html>

@@ -1,158 +1,175 @@
-// URL to explain PHASER scene: https://rexrainbow.github.io/phaser3-rex-notes/docs/site/scene/
-
-export default class Game extends Phaser.Scene {
+export default class GameScene extends Phaser.Scene {
   constructor() {
-    super("game");
-  }
-
-  init() {
-    this.score = 0;
+    super("GameScene");
   }
 
   preload() {
-    this.load.tilemapTiledJSON("map", "public/assets/tilemap/map.json");
-    this.load.image("tileset", "public/assets/texture.png");
-    this.load.image("star", "public/assets/star.png");
-
-    this.load.spritesheet("dude", "./public/assets/dude.png", {
+    this.load.tilemapTiledJSON("mapa", "public/assets/tilemap/mapa.json");
+    this.load.image("tiles", "public/assets/atlas/albañil.png");
+    this.load.image("star", "public/assets/atlas/star.png");
+    this.load.spritesheet("pj", "./public/assets/atlas/pj.png", {
       frameWidth: 32,
       frameHeight: 48,
     });
+    this.load.image("pocion", "public/assets/atlas/pocion.jpg"); // <--- DESCOMENTA ESTA LÍNEA
   }
 
   create() {
-    const map = this.make.tilemap({ key: "map" });
+    const map = this.make.tilemap({ key: "mapa" });
+    const tileset = map.addTilesetImage("pared", "tiles");
 
-    // Parameters are the name you gave the tileset in Tiled and then the key of the tileset image in
-    // Phaser's cache (i.e. the name you used in preload)
-    const tileset = map.addTilesetImage("tileset", "tileset");
+    const sueloLayer = map.createLayer("suelo", tileset, 0, 0);
+    const suelo2Layer = map.createLayer("suelo2", tileset, 0, 0);
+    const paredesLayer = map.createLayer("paredes", tileset, 0, 0);
+    paredesLayer.setCollisionByProperty({ collide: true });
 
-    // Parameters: layer name (or index) from Tiled, tileset, x, y
-    const belowLayer = map.createLayer("Fondo", tileset, 0, 0);
-    const platformLayer = map.createLayer("Plataformas", tileset, 0, 0);
-    const objectsLayer = map.getObjectLayer("Objetos");
+    // Guardar todos los puntos de spawn
+    this.spawnPoints = map.getObjectLayer("objetos").objects.filter(obj => obj.name === "pj");
 
-    // Find in the Object Layer, the name "dude" and get position
-    const spawnPoint = map.findObject(
-      "Objetos",
-      (obj) => obj.name === "player"
-    );
-    console.log("spawnPoint", spawnPoint);
+    // Usar el primer spawn por defecto
+    const spawnPoint = this.spawnPoints[0];
 
-    this.player = this.physics.add.sprite(spawnPoint.x, spawnPoint.y, "dude");
+    if (!spawnPoint) {
+      console.error("No se encontró el objeto 'pj' en Tiled.");
+      return;
+    }
 
-    this.player.setBounce(0.2);
-    this.player.setCollideWorldBounds(true);
+    this.player = this.physics.add.sprite(spawnPoint.x, spawnPoint.y, "pj");
+    this.player.setScale(0.5);
+    this.physics.add.collider(this.player, paredesLayer);
 
-    this.anims.create({
-      key: "left",
-      frames: this.anims.generateFrameNumbers("dude", { start: 0, end: 3 }),
-      frameRate: 10,
-      repeat: -1,
+    paredesLayer.renderDebug(this.add.graphics(), {
+      tileColor: null,
+      collidingTileColor: new Phaser.Display.Color(255, 0, 0, 100),
+      faceColor: new Phaser.Display.Color(0, 255, 0, 255)
     });
 
-    this.anims.create({
-      key: "turn",
-      frames: [{ key: "dude", frame: 4 }],
-      frameRate: 20,
-    });
+    this.cameras.main.startFollow(this.player);
+    this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
-    this.anims.create({
-      key: "right",
-      frames: this.anims.generateFrameNumbers("dude", { start: 5, end: 8 }),
-      frameRate: 10,
-      repeat: -1,
-    });
+    // Crear grupo de pociones
+    this.crearPociones(map);
 
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.keyR = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
-
-    platformLayer.setCollisionByProperty({ esColisionable: true });
-    this.physics.add.collider(this.player, platformLayer);
-
-    // tiles marked as colliding
-    /*
-    const debugGraphics = this.add.graphics().setAlpha(0.75);
-    platformLayer.renderDebug(debugGraphics, {
-      tileColor: null, // Color of non-colliding tiles
-      collidingTileColor: new Phaser.Display.Color(243, 134, 48, 255), // Color of colliding tiles
-      faceColor: new Phaser.Display.Color(40, 39, 37, 255), // Color of colliding face edges
-    });
-    */
-
-    // Create empty group of starts
-    this.stars = this.physics.add.group();
-
-    // find object layer
-    // if type is "stars", add to stars group
-    objectsLayer.objects.forEach((objData) => {
-      console.log(objData);
-      const { x = 0, y = 0, name, type } = objData;
-      switch (type) {
-        case "star": {
-          // add star to scene
-          // console.log("estrella agregada: ", x, y);
-          const star = this.stars.create(x, y, "star");
-          star.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
-          break;
-        }
-      }
-    });
-
-    // add collision between player and stars
-    this.physics.add.collider(
+    this.physics.add.overlap(
       this.player,
-      this.stars,
-      this.collectStar,
+      this.pociones,
+      this.recogerPocion,
       null,
       this
     );
-    // add overlap between stars and platform layer
-    this.physics.add.collider(this.stars, platformLayer);
 
-    this.scoreText = this.add.text(16, 16, `Score: ${this.score}`, {
-      fontSize: "32px",
-      fill: "#000",
+    // Detectar contacto con suelo2
+    this.physics.add.overlap(
+      this.player,
+      suelo2Layer,
+      this.tocarSuelo2,
+      null,
+      this
+    );
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+
+    // --- EFECTO DE OSCURIDAD CON MÁSCARA ---
+    this.darkness = this.add.graphics();
+    this.darkness.fillStyle(0x000000, 0.95);
+    this.darkness.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
+    this.darkness.setScrollFactor(0);
+
+    // Crea un gráfico para la máscara
+    this.visionMask = this.make.graphics({ x: 0, y: 0, add: false });
+    this.visionMask.fillStyle(0xffffff);
+    this.visionMask.fillCircle(0, 0, this.visionRadius);
+
+    // Aplica la máscara
+    this.darknessMask = this.visionMask.createGeometryMask();
+    this.darkness.setMask(this.darknessMask);
+  }
+
+  // Función para crear pociones
+  crearPociones(map) {
+    if (this.pociones) this.pociones.clear(true, true);
+    this.pociones = this.physics.add.group();
+    map.getObjectLayer("objetos").objects.forEach((obj) => {
+      if (obj.name === "pocion") {
+        this.pociones
+          .create(obj.x, obj.y, "pocion")
+          .setOrigin(0, 1)
+          .setScale(0.1); // <-- Muchísimo más pequeña
+      }
     });
   }
 
-  update() {
-    // update game objects
-    if (this.cursors.left.isDown) {
-      this.player.setVelocityX(-160);
-
-      this.player.anims.play("left", true);
-    } else if (this.cursors.right.isDown) {
-      this.player.setVelocityX(160);
-
-      this.player.anims.play("right", true);
-    } else {
-      this.player.setVelocityX(0);
-
-      this.player.anims.play("turn");
-    }
-
-    if (this.cursors.up.isDown) {
-      this.player.setVelocityY(-330);
-    }
-
-    if (Phaser.Input.Keyboard.JustDown(this.keyR)) {
-      console.log("Phaser.Input.Keyboard.JustDown(this.keyR)");
-      this.scene.restart();
+  // Al recoger una poción
+  recogerPocion(player, pocion) {
+    pocion.destroy();
+    if (this.pociones.countActive(true) === 0) {
+      this.todasPocionesRecogidas = true;
+      this.puedeTeletransportar = false; // Nueva bandera
+      // Mensaje opcional
+      console.log("¡Has recogido todas las pociones! Busca el suelo2 para reiniciar.");
     }
   }
 
-  collectStar(player, star) {
-    star.disableBody(true, true);
+  // Al tocar suelo2 después de recoger todas las pociones
+  tocarSuelo2(player, tile) {
+    if (this.todasPocionesRecogidas && !this.puedeTeletransportar) {
+      this.puedeTeletransportar = true; // Permite teletransportar solo una vez
 
-    this.score += 10;
-    this.scoreText.setText(`Score: ${this.score}`);
+      // Elegir un spawn diferente al actual
+      const spawnsDisponibles = this.spawnPoints.filter(spawn =>
+        spawn.x !== this.player.x || spawn.y !== this.player.y
+      );
+      const nuevoSpawn = Phaser.Utils.Array.GetRandom(spawnsDisponibles);
 
-    if (this.stars.countActive(true) === 0) {
-      //  A new batch of stars to collect
-      this.stars.children.iterate(function (child) {
-        child.enableBody(true, child.x, 0, true, true);
-      });
+      // Mover al jugador al nuevo spawn
+      this.player.setPosition(nuevoSpawn.x, nuevoSpawn.y);
+
+      // Reiniciar pociones
+      this.todasPocionesRecogidas = false;
+      this.crearPociones(this.make.tilemap({ key: "mapa" }));
+
+      // Volver a registrar el overlap con las nuevas pociones
+      this.physics.add.overlap(
+        this.player,
+        this.pociones,
+        this.recogerPocion,
+        null,
+        this
+      );
+
+      // Opcional: mensaje
+      console.log("¡Nuevo ciclo iniciado en otro spawn!");
+    }
+  }
+
+  update() {
+    // Movimiento del jugador
+    if (!this.player) return;
+
+    const speed = 150;
+    this.player.setVelocity(0);
+
+    if (this.cursors.left.isDown) {
+      this.player.setVelocityX(-speed);
+    } else if (this.cursors.right.isDown) {
+      this.player.setVelocityX(speed);
+    }
+
+    if (this.cursors.up.isDown) {
+      this.player.setVelocityY(-speed);
+    } else if (this.cursors.down.isDown) {
+      this.player.setVelocityY(speed);
+    }
+
+    // --- EFECTO DE OSCURIDAD CON MÁSCARA ---
+    if (this.visionMask && this.player) {
+      const cam = this.cameras.main;
+      const px = this.player.x - cam.scrollX;
+      const py = this.player.y - cam.scrollY;
+
+      this.visionMask.clear();
+      this.visionMask.fillStyle(0xffffff);
+      this.visionMask.fillCircle(px, py, this.visionRadius);
     }
   }
 }
